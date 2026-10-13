@@ -2,7 +2,8 @@
 
 All numbers below are from the real Home Credit dataset (307,511 applications, downloaded
 from Kaggle — see [`01-data-sources.md`](01-data-sources.md)), except the Fannie Mae ECL
-section, which remains the disclosed synthetic stand-in.
+section, where the loan-performance panel is still a disclosed synthetic stand-in but the
+macro covariates driving it are now real FRED data.
 
 ## Scorecard
 
@@ -94,10 +95,12 @@ Which constraint binds is a property of the data, not of the optimizer's structu
 checking it explicitly — rather than assuming it's always the loss cap, or always the same
 constraint run to run — is the actual point of this section.)*
 
-## ECL and stress testing (Fannie Mae portfolio — still synthetic, see docs/01)
+## ECL and stress testing (Fannie Mae portfolio — synthetic loan panel, real FRED macro data)
 
 See [`04-ecl-and-stress-testing.md`](04-ecl-and-stress-testing.md) in full. Total portfolio
-ECL: baseline ~$28.7M, adverse ~$54.4M, severely adverse ~$104.1M — correctly monotonic after
+ECL: baseline ~$27.8M, adverse ~$51.0M, severely adverse ~$96.8M — correctly monotonic after
 fixing two model-development bugs (miscalibrated hazard model, unclipped tenure extrapolation)
-caught during development. Out-of-time validated: a hazard model trained only on 2005-2010
-vintages still discriminates (AUC 0.660) and stays well-calibrated on 2015-2019 vintages.
+caught during development, plus a resampling bug in the real FRED ingestion itself (see
+`docs/01-data-sources.md`) caught while swapping synthetic macro data for real. Out-of-time
+validated: a hazard model trained only on 2005-2010 vintages still discriminates
+(AUC 0.629) and stays well-calibrated on 2015-2019 vintages.

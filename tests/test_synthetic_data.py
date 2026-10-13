@@ -18,6 +18,23 @@ def _require(path: pathlib.Path):
     return path
 
 
+def test_macro_panel_has_no_gaps():
+    """Regression guard: ingest/fred_ingest.py once chained .resample("MS").ffill() directly
+    on the concatenated raw series, which only keeps a value when the original observation
+    lands exactly on day 1 of the month -- true for monthly series, almost never true for a
+    daily one (DGS10), never true for a quarterly one (GDPC1). dropna() then discarded most
+    months, collapsing ~470 expected months down to 81 scattered ones. This checks the
+    month-to-month gaps are never more than a single month, however the panel was built.
+    """
+    path = _require(ROOT / "sources" / "fred" / "macro_monthly.parquet")
+    macro = pd.read_parquet(path).sort_values("date")
+    macro["date"] = pd.to_datetime(macro["date"])
+    gaps = macro["date"].diff().dropna()
+    max_gap_days = gaps.max().days
+    assert max_gap_days <= 31, f"Macro panel has a gap of {max_gap_days} days -- expected continuous monthly data"
+    assert len(macro) >= 200, f"Macro panel has only {len(macro)} rows -- suspiciously short for a monthly series"
+
+
 def test_macro_panel_covers_crisis_and_benign_windows():
     path = _require(ROOT / "sources" / "fred" / "macro_monthly.parquet")
     macro = pd.read_parquet(path)

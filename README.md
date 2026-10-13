@@ -21,12 +21,12 @@ for each:
 |---|---|---|
 | Home Credit Default Risk (Kaggle) | Application scorecard | **Real data** — 307,511 applications, downloaded from Kaggle and verified against the known dataset (row count, ~8.07% base default rate). Still synthetic: the reject-inference pool (`docs/03-reject-inference.md`), since no version of this dataset includes one. |
 | Fannie Mae Loan Performance | Vintage/roll-rate/survival/ECL | **Synthetic stand-in** — real extracts require manual portal registration. |
-| FRED macro series | Stress testing overlay | **Synthetic stand-in** — swap-in reader ready, needs a free API key. |
+| FRED macro series | Stress testing overlay | **Real data** — 478 months (1987-2026) pulled via `fredapi`, feeding the Fannie Mae hazard model and stress scenarios. |
 
 Every generator matches the real schema exactly and every real-data reader is already
-written, so swapping in the remaining two means re-running ingestion and the warehouse
-build — nothing in `features/`, `scorecard/`, `challenger/`, `portfolio/`, or the marts
-changes. See [`docs/06-assumptions-and-limitations.md`](docs/06-assumptions-and-limitations.md)
+written, so swapping in the remaining one (Fannie Mae) means re-running ingestion and the
+warehouse build — nothing in `features/`, `scorecard/`, `challenger/`, `portfolio/`, or the
+marts changes. See [`docs/06-assumptions-and-limitations.md`](docs/06-assumptions-and-limitations.md)
 for the full disclosure.
 
 ## Setup
@@ -95,11 +95,9 @@ use. Just don't let it overwrite real CSVs you've already placed in `sources/hom
 (it writes `application_train.csv` etc. too; extract the real zip *after* running it, or move
 the reject-pool files elsewhere first).
 
-**Swapping in real Fannie Mae/FRED data:** get a FRED API key (free, instant) and/or
-register at the Fannie Mae Data Dynamics portal, then run `ingest/fred_ingest.py` and/or
-`ingest/fannie_mae_ingest.py` (the latter needs its two parser stubs filled in against the
-real file layout first) instead of their `synthetic_*` counterparts, then re-run from
-`warehouse/build_warehouse.py` onward.
+**Swapping in real Fannie Mae data:** register at the Fannie Mae Data Dynamics portal, fill
+in `ingest/fannie_mae_ingest.py`'s two parser stubs against the real file layout, then re-run
+from `warehouse/build_warehouse.py` onward. (FRED is already real data — see below.)
 
 ## What's built
 
@@ -114,11 +112,11 @@ real file layout first) instead of their `synthetic_*` counterparts, then re-run
   against a hidden-truth reject pool) → LightGBM + SHAP challenger (**beats** the scorecard
   out-of-sample on real data, test Gini 0.538 vs. 0.497 — a genuine tradeoff now, see
   `docs/07-results.md` for the deploy-or-not discussion) → adverse-action reason codes.
-- **Portfolio (Fannie Mae side, synthetic)** — discrete-time hazard/survival model with
-  time-varying macro covariates, out-of-time validated (trained on 2005-2010 vintages only,
-  AUC 0.660 on 2015-2019 vintages), credibility-weighted LGD by region×LTV, 3 macro stress
-  scenarios, IFRS 9 three-stage ECL engine (baseline ~$28.7M → severely adverse ~$104.1M,
-  correctly monotonic).
+- **Portfolio (Fannie Mae side, synthetic loan panel + real FRED macro data)** —
+  discrete-time hazard/survival model with time-varying macro covariates, out-of-time
+  validated (trained on 2005-2010 vintages only, AUC 0.629 on 2015-2019 vintages),
+  credibility-weighted LGD by region×LTV, 3 macro stress scenarios, IFRS 9 three-stage ECL
+  engine (baseline ~$27.8M → severely adverse ~$96.8M, correctly monotonic).
 - **Decision** — cutoff sweep + constrained optimizer (loss-rate cap, volume floor, AND a
   segment concentration limit) with a genuine binding-constraint finding on real data: the
   **volume floor** binds (cutoff 565, 55.0% approval) — the loss cap and concentration limit
@@ -168,7 +166,8 @@ real file layout first) instead of their `synthetic_*` counterparts, then re-run
 8. **No real out-of-time validation** — an early version of the docs claimed the Fannie Mae
    hazard model demonstrated out-of-time validation, but the code just fit on the full panel.
    Fixed by actually training on 2005-2010 vintages and validating on 2015-2019 vintages
-   (AUC 0.660, well-calibrated hazard, across a materially different macro regime).
+   (AUC 0.629 on real FRED macro data, well-calibrated hazard, across a materially different
+   macro regime).
 9. **Missing segment concentration constraint** — the cutoff optimizer enforced a loss-rate
    cap and a volume floor but not the concentration limit the spec also asks for. Added it.
 10. **Hardcoded policy cutoff drifting stale in 3 files** — the optimizer's computed cutoff
@@ -188,6 +187,14 @@ real file layout first) instead of their `synthetic_*` counterparts, then re-run
     gracefully to showing the raw column name rather than crashing, which is why it wasn't
     caught until someone read the actual output. Fixed by covering every characteristic seen
     across both fits.
+13. **FRED ingestion silently dropped from ~470 months to 81 scattered ones** —
+    `ingest/fred_ingest.py` chained `.resample("MS").ffill()` directly on the concatenated raw
+    series. That shorthand only keeps a value when the original observation lands exactly on
+    day 1 of the month — true for monthly series reported on the 1st, almost never true for
+    `DGS10` (daily; day 1 is frequently a weekend/holiday), and never true for `GDPC1`
+    (quarterly). `dropna()` then discarded most months as incomplete. Fixed by resampling
+    each series to month-start *individually* with `.resample("MS").last()` (correctly
+    aggregating "the last observation within the month") before combining.
 
 ## Repository layout
 

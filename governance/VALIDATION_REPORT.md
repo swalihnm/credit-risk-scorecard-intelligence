@@ -71,7 +71,7 @@ methodology changes) matters.
 
 | # | Finding | Severity | Recommendation |
 |---|---|---|---|
-| 1 | ~~Development data is synthetic~~ — **resolved**: real Kaggle data now in use | Resolved | None — re-validate again if the reject pool or Fannie Mae/FRED sources are ever swapped to real data too |
+| 1 | ~~Development data is synthetic~~ — **resolved**: real Kaggle data now in use | Resolved | None — re-validate again if the reject pool or Fannie Mae loan-performance data (FRED macro data is already real as of this report) is ever swapped to real data too |
 | 2 | No out-of-time validation possible (Home Credit side) | Medium | Accept as a dataset limitation; monitor Gini/PSI in production closely post-deployment as compensation |
 | 3 | LGD/APR/capital assumptions are flat, untested for sensitivity | Medium | Run a sensitivity grid before finalizing the cutoff recommendation |
 | 4 | Reject-inference validation is against a synthetic reject pool not matched to the real accepted population's distributions | Low-Medium | Treat the "+0.5 points, -1pp approval" result as illustrative of the *mechanism*, not a production-ready calibration of the inflation factor |

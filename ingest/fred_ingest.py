@@ -34,7 +34,20 @@ def main() -> None:
         s = fred.get_series(series_id)
         frames.append(s.rename(col))
 
-    df = pd.concat(frames, axis=1).resample("MS").ffill().dropna().reset_index()
+    # Each series is resampled to month-start *individually* first, taking the last
+    # observation within each month (correct for DGS10's daily cadence -- there is no
+    # guarantee day 1 of a month is a trading day). Only then are they combined and
+    # forward-filled for GDPC1's quarterly gaps.
+    #
+    # Chaining `.resample("MS").ffill()` directly on the already-concatenated frame (the
+    # first version of this function) is NOT equivalent to this: that shorthand only keeps
+    # a value when the original data lands exactly on day 1 of the month, which is rare for
+    # a daily series and never happens for most months of a quarterly one. It silently
+    # dropped the dataset from the expected ~470 months (1975-2026) down to 81 scattered
+    # months before `dropna()` even ran, because almost every bin was NaN for DGS10 or
+    # GDPC1 and only "got lucky" occasionally when day 1 coincided with a reporting date.
+    monthly = pd.concat([s.resample("MS").last() for s in frames], axis=1)
+    df = monthly.ffill().dropna().reset_index()
     df = df.rename(columns={"index": "date"})
     df["source"] = "fred_real"
 

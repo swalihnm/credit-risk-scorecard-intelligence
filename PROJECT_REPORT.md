@@ -1,6 +1,9 @@
 # Credit Risk Scorecard & Portfolio Decision Intelligence — Project Report
 
-**Status as of this report:** Python/SQL/API layer complete and verified. Power BI report in progress.
+**Status as of this report:** Python/SQL/API layer complete and verified, pushed to GitHub
+(`swalihnm/credit-risk-scorecard-intelligence`). Two of three data sources are now real
+(Home Credit, FRED); Fannie Mae remains a disclosed synthetic stand-in. Power BI report not
+yet started in a saved session — the only required work remaining.
 
 ---
 
@@ -28,13 +31,13 @@ interactive cutoff exploration. FastAPI exposes single-application scoring.
 - Reject inference (fuzzy augmentation) quantifiably tightens the scorecard by +0.5 points.
 - A constrained cutoff optimizer settles on cutoff 565 (55.0% approval), with the **volume
   floor**, not the loss cap or concentration limit, as the actual binding constraint.
-- An IFRS 9 three-stage ECL engine on the (synthetic, disclosed) Fannie Mae mortgage
-  portfolio produces baseline ECL ~$28.7M rising to ~$104.1M under a severely adverse
-  scenario, out-of-time validated (trained on 2005-2010 vintages, AUC 0.660 on 2015-2019
-  vintages).
-- 23 automated tests pass; a FastAPI scoring service is built, containerized, and verified
+- An IFRS 9 three-stage ECL engine on the (synthetic loan panel, real FRED macro data)
+  Fannie Mae mortgage portfolio produces baseline ECL ~$27.8M rising to ~$96.8M under a
+  severely adverse scenario, out-of-time validated (trained on 2005-2010 vintages, AUC 0.629
+  on 2015-2019 vintages).
+- 24 automated tests pass; a FastAPI scoring service is built, containerized, and verified
   end-to-end in Docker.
-- 12 real bugs were caught and fixed during development (full list in Section 9) — several
+- 13 real bugs were caught and fixed during development (full list in Section 9) — several
   specifically because real data was swapped in for an earlier synthetic stand-in.
 
 ---
@@ -48,13 +51,13 @@ different products, markets, and regulatory regimes.
 |---|---|---|
 | **Home Credit Default Risk** (Kaggle) | Application scorecard | **Real data.** 307,511 applications downloaded from Kaggle, verified against the known dataset (row count, ~8.07% base default rate). |
 | **Fannie Mae Single-Family Loan Performance** | Vintage curves, roll rates, survival/hazard model, LGD, ECL, stress testing | **Synthetic stand-in.** Real extracts require manual portal registration (no scriptable API). The generator (`ingest/synthetic_fannie_mae.py`) is a macro-modulated Markov delinquency model matching the real schema exactly, tuned to be directionally realistic (crisis vintages default more than benign vintages). |
-| **FRED macro series** (`UNRATE`, `CSUSHPINSA`, `DGS10`, `GDPC1`) | Stress-testing overlay | **Synthetic stand-in.** A free API key was attempted but not obtained during this build; the real-data reader (`ingest/fred_ingest.py`) is written and ready. |
+| **FRED macro series** (`UNRATE`, `CSUSHPINSA`, `DGS10`, `GDPC1`) | Stress-testing overlay | **Real data.** 478 continuous months (1987-2026), pulled via `fredapi`. A resampling bug caught while wiring this up is detailed in Section 9 (#13). |
 | **Home Credit reject pool** | Reject inference | **Synthetic, and stays synthetic regardless of the accepts data.** No version of this dataset — real or synthetic — includes a population of declined applicants with known features but no observed outcome. This is a structural gap in the dataset itself, not something downloading real data fixes. |
 
 Every synthetic generator produces the exact real-world schema, and every corresponding
-real-data reader is already written — swapping in the remaining real sources requires only
-running those readers and rebuilding the warehouse; nothing in `features/`, `scorecard/`,
-`challenger/`, `portfolio/`, or the marts needs to change.
+real-data reader is already written — swapping in the one remaining synthetic source
+(Fannie Mae) requires only running its reader and rebuilding the warehouse; nothing in
+`features/`, `scorecard/`, `challenger/`, `portfolio/`, or the marts needs to change.
 
 ---
 
@@ -214,14 +217,16 @@ lost. SHAP confirms the same top drivers as the scorecard (`EXT_SOURCE_2/3/1`,
 
 **Discrete-time hazard model** (`portfolio/survival.py`): logistic regression of monthly
 default hazard on tenure, static risk factors (FICO, LTV, rate), and **time-varying macro
-covariates** (unemployment, an asymmetric `hpi_decline_pct` feature — only price declines
-should raise risk). Gives a PD **term structure** rather than a single 12-month PD.
+covariates** — now real FRED data (unemployment, an asymmetric `hpi_decline_pct` feature —
+only price declines should raise risk). Gives a PD **term structure** rather than a single
+12-month PD.
 
 **Out-of-time validation:** trained only on 2005-2010 (crisis) vintages, validated on
 2015-2019 (benign) vintages — a genuinely harder test than a random split, since the two
-windows sit in materially different macro regimes. Result: **AUC 0.660**, with predicted vs.
-actual monthly hazard of 0.00154 vs. 0.00149 — well calibrated across the regime shift,
-because the model leans on macro covariates rather than memorizing vintage-specific patterns.
+windows sit in materially different macro regimes. Result: **AUC 0.629** (real FRED macro
+data), with predicted vs. actual monthly hazard of 0.00193 vs. 0.00149 — well calibrated
+across the regime shift, because the model leans on macro covariates rather than memorizing
+vintage-specific patterns.
 
 **LGD** (`portfolio/lgd.py`): realized loss severity segmented by region × LTV band, with
 credibility-weighted shrinkage (`n/(n+30)`) toward the portfolio mean for thin segments.
@@ -231,18 +236,19 @@ Cleanly monotonic: ~24-28% at LTV <60 rising to ~45-48% at LTV 90+.
 discount factor`. Stage assignment via standard rebuttable-presumption backstops (Stage 1:
 current; Stage 2: 30-59 dpd; Stage 3: 60+ dpd).
 
-**Stress scenarios** (`portfolio/stress_scenarios.py`): baseline (trailing macro, held flat),
-adverse (+3pp unemployment, -15% HPI, ramped over 8 quarters), severely adverse (+6pp, -30%,
-matched to the synthetic panel's own 2008 peak).
+**Stress scenarios** (`portfolio/stress_scenarios.py`): baseline (real FRED trailing-12-month
+macro, held flat), adverse (+3pp unemployment, -15% HPI, ramped over 8 quarters), severely
+adverse (+6pp, -30%, matched to the historical 2008 peak).
 
 | Scenario | Total ECL |
 |---|---|
-| Baseline | ~$28.7M |
-| Adverse | ~$54.4M |
-| Severely adverse | ~$104.1M |
+| Baseline | ~$27.8M |
+| Adverse | ~$51.0M |
+| Severely adverse | ~$96.8M |
 
-Correctly monotonic after fixing two model-development bugs caught during this build (see
-Section 9).
+Correctly monotonic after fixing three model-development bugs caught during this build (see
+Section 9): two in the hazard model itself, plus a FRED resampling bug caught while swapping
+synthetic macro data for real.
 
 ---
 
@@ -301,6 +307,10 @@ analysis.)
   measures, 5 report pages, and RLS role testing. TMDL (text-based model editing) is
   available in this Power BI Desktop installation, which should speed up entering
   relationships and measures versus one-at-a-time dialogs.
+- **No `.pbix` file has been saved to disk yet.** The progress above was done in a Power BI
+  Desktop session that was not saved before closing — save early and often (`File → Save As`
+  → `powerbi/credit_risk_mis.pbix`) once this work resumes, since Power BI Desktop does not
+  persist unsaved work between sessions.
 
 ---
 
@@ -338,7 +348,7 @@ output exactly (same score, decision, reason codes).
 
 ## 13. Testing & Bugs Caught During Development
 
-**23 automated tests** across data integrity, portfolio economics, scorecard correctness,
+**24 automated tests** across data integrity, portfolio economics, scorecard correctness,
 policy optimization, and the API (`tests/`). Several exist specifically because they caught
 real bugs — kept as permanent regression guards:
 
@@ -379,6 +389,16 @@ real bugs — kept as permanent regression guards:
 12. **Adverse-action reason text missing for 8 of 14 real characteristics** — same root cause
     as #11, degraded gracefully to raw column names rather than crashing. Fixed: covered every
     characteristic seen across both the synthetic and real fits.
+13. **FRED ingestion silently dropped from ~470 months to 81 scattered ones** —
+    `ingest/fred_ingest.py` chained `.resample("MS").ffill()` directly on the concatenated raw
+    series. That shorthand only keeps a value when the original observation lands exactly on
+    day 1 of the month: true for monthly series reported on the 1st, almost never true for
+    `DGS10` (daily — day 1 is frequently a weekend/holiday), and never true for `GDPC1`
+    (quarterly). `dropna()` then discarded most months as incomplete, and the bug was only
+    visible by inspecting the output row count and date spacing, not from any error. Fixed:
+    resample each series to month-start *individually* with `.resample("MS").last()`
+    (correctly aggregating "the last observation within the month") before combining and
+    forward-filling — recovers the full 478-month real series.
 
 ---
 
@@ -386,9 +406,9 @@ real bugs — kept as permanent regression guards:
 
 - Home Credit and Fannie Mae are different portfolios, markets, and regulatory regimes —
   used to demonstrate complementary techniques, never merged into one book.
-- Fannie Mae and FRED remain synthetic stand-ins; the Home Credit reject pool is synthetic
-  regardless of which accepts data is used (no real reject population exists in any version
-  of this dataset).
+- Fannie Mae's loan-performance panel remains a synthetic stand-in (FRED macro data is now
+  real); the Home Credit reject pool is synthetic regardless of which accepts data is used
+  (no real reject population exists in any version of this dataset).
 - No true out-of-time validation is possible for the Home Credit scorecard (no
   application-date field in the real dataset) — a structural dataset limitation, mitigated
   by demonstrating true out-of-time validation on the Fannie Mae side instead.
@@ -408,7 +428,7 @@ real bugs — kept as permanent regression guards:
 ## 15. Implementation Plan — Remaining Work
 
 ### Completed
-- [x] Data ingestion (real Home Credit, synthetic Fannie Mae/FRED, synthetic reject pool)
+- [x] Data ingestion (real Home Credit, real FRED, synthetic Fannie Mae, synthetic reject pool)
 - [x] Warehouse build (DuckDB)
 - [x] Relational feature engineering + leakage audit
 - [x] SQL analytics (vintage, roll rate, concentration, segment performance, macro alignment)
@@ -416,9 +436,9 @@ real bugs — kept as permanent regression guards:
 - [x] Reject inference (fuzzy augmentation, hidden-truth validation)
 - [x] Challenger model (LightGBM + SHAP) + deploy-or-not analysis
 - [x] Adverse action reason codes
-- [x] Fannie Mae survival/hazard model + out-of-time validation
+- [x] Fannie Mae survival/hazard model + out-of-time validation (on real FRED macro data)
 - [x] LGD estimation
-- [x] IFRS 9 ECL engine + 3 stress scenarios
+- [x] IFRS 9 ECL engine + 3 stress scenarios (on real FRED macro data)
 - [x] Constrained cutoff optimizer (loss cap, volume floor, concentration limit) + shadow prices
 - [x] All Power BI marts built
 - [x] All DAX measures written (as reviewable text)
@@ -426,10 +446,14 @@ real bugs — kept as permanent regression guards:
 - [x] Governance suite (model card, monitoring plan, adverse action, validation report, RLS design)
 - [x] FastAPI scoring service
 - [x] Dockerfile, built and verified end-to-end
-- [x] 23 automated tests, all passing
+- [x] 24 automated tests, all passing
+- [x] Pushed to GitHub (`swalihnm/credit-risk-scorecard-intelligence`)
 
-### Remaining (Power BI Desktop build)
-- [ ] Finish star-schema relationships in Power BI Desktop:
+### Remaining (Power BI Desktop build — the only required piece left)
+- [ ] Reload the 13 tables into a fresh Power BI Desktop session (an earlier session's
+      progress — table loads, auto-detected-relationship cleanup — was not saved before
+      closing, so this restarts from scratch)
+- [ ] Build the star-schema relationships:
   - [ ] `mart_loan_performance[reporting_date]` → `dim_date[date]` (active)
   - [ ] `mart_loan_performance[origination_date]` → `dim_date[date]` (inactive — role-playing dimension)
   - [ ] `mart_loan_performance[bucket_prev]` → `dim_bucket_from[bucket_from]`
@@ -437,18 +461,19 @@ real bugs — kept as permanent regression guards:
   - [ ] `mart_application[score_band]` → `dim_score_band[band]`
   - [ ] `mart_cutoff_frontier[scenario]` → `dim_scenario[scenario]`
   - [ ] `mart_ecl[reporting_date]` → `dim_date[date]`
+  - [ ] `mart_ecl[scenario]` → `dim_scenario[scenario]`
+  - [ ] `mart_loan_performance[state]` → `dim_geography[state]`
 - [ ] Mark `dim_date` as the official Date Table
 - [ ] Create the disconnected `Cutoff` what-if parameter (400-800, step 5, default 565)
-- [ ] Enter all DAX measures from `powerbi/measures/*.txt` (organized into matching display folders)
+- [ ] Enter all DAX measures from `powerbi/measures/*.txt` (organized into matching display folders) — TMDL view is confirmed available in this installation and should speed this up considerably over one-at-a-time dialogs
 - [ ] Build the 5 report pages: Portfolio Overview, Vintage & Roll Rates, Credit Policy, Stress Testing, Model Monitoring
 - [ ] Configure and test RLS roles (Regional Risk Manager, Portfolio Head) via "View as Role"
 - [ ] Optional: configure incremental refresh parameters on `mart_loan_performance` (design already specified in `docs/05-powerbi-data-model.md`)
-- [ ] Save the `.pbix`, export a PDF, capture screenshots for the README
+- [ ] **Save the `.pbix` early and often** (`powerbi/credit_risk_mis.pbix`) — Power BI Desktop does not persist unsaved work between sessions
+- [ ] Export a PDF, capture screenshots for the README
 
 ### Optional / explicitly deferred
-- [ ] Real Fannie Mae data (manual portal registration + approval; parser stubs in `ingest/fannie_mae_ingest.py` ready to fill in)
-- [ ] Real FRED data (attempted, not completed this session — reader in `ingest/fred_ingest.py` is ready)
-- [ ] Git commit (held per explicit request; nothing committed yet)
+- [ ] Real Fannie Mae data (manual portal registration + approval; parser stubs in `ingest/fannie_mae_ingest.py` ready to fill in) — low priority; the synthetic stand-in already demonstrates the full methodology correctly
 - [ ] Fair lending / disparate impact testing (deliberately out of scope, named as a limitation per governance best practice)
 
 ---

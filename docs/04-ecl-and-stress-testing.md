@@ -2,7 +2,10 @@
 
 Applies to the Fannie Mae (synthetic stand-in) portfolio only — see
 [`01-data-sources.md`](01-data-sources.md) for why this is never combined with the Home
-Credit application scorecard.
+Credit application scorecard. The loan-performance panel itself is still synthetic, but the
+macro covariates driving it (`unrate_at_performance_month`, `hpi_decline_pct`) are now **real
+FRED data** (1987-2026) — see `01-data-sources.md` for a resampling bug that was caught and
+fixed while wiring this in.
 
 ## PD: discrete-time hazard model (`portfolio/survival.py`)
 
@@ -40,9 +43,10 @@ Per the project's validation protocol (train early vintages, validate later ones
 a random holdout): the hazard model is fit on person-months from **2005-2010 (crisis)
 vintages only** and validated on **2015-2019 (benign) vintages** — a genuinely harder test
 than a random split, since the two windows sit in materially different macro regimes. Result:
-**AUC 0.660** on the out-of-time vintages, with predicted vs. actual monthly hazard of
-0.00154 vs. 0.00149 — close enough to call well calibrated across the regime shift, not just
-discriminating. This is only possible because the model leans on its macro covariates
+**AUC 0.629** on the out-of-time vintages (real FRED macro data; 0.660 on the earlier
+synthetic macro panel), with predicted vs. actual monthly hazard of 0.00193 vs. 0.00149 —
+close enough to call well calibrated across the regime shift, not just discriminating. This
+is only possible because the model leans on its macro covariates
 (unemployment, HPI decline) rather than memorizing vintage-specific patterns — exactly the
 point of including them as time-varying covariates in the first place.
 
@@ -96,21 +100,25 @@ maturity.
 | Adverse | +3pp | -15% | Linear over 8 quarters, then flat |
 | Severely adverse | +6pp | -30% | Linear over 8 quarters, then flat |
 
-Magnitudes are matched to the synthetic macro panel's own 2008 peak (~11% unemployment) so
-the scenario is *comparable in kind* to that history without replaying its exact path
-(replaying the literal historical slice was tried first and produced a non-monotonic scenario
-ordering purely from that window's boundary effects — see git history).
+Magnitudes (+6pp unemployment, -30% HPI for severely adverse) were originally matched to the
+synthetic macro panel's own 2008 peak (~11% unemployment); now that the macro panel is real
+FRED data, the baseline scenario reflects actual current macro conditions (the real trailing
+12-month average as of ingestion) rather than a synthetic endpoint, while the stress
+magnitudes remain fixed, explicit assumptions on top of that real baseline. (Replaying the
+literal 2008 historical slice for severely adverse was tried first and produced a
+non-monotonic scenario ordering purely from that window's boundary effects — see git
+history.)
 
 ## Results (illustrative — see limitations)
 
 Total portfolio ECL across active (non-charged-off) loans as of the last simulated
-reporting month:
+reporting month, using real FRED macro data:
 
 | Scenario | Total ECL | Stage 1 | Stage 2 | Stage 3 |
 |---|---|---|---|---|
-| Baseline | ~$28.7M | ~$26.8M | ~$0.5M | ~$1.4M |
-| Adverse | ~$54.4M | ~$46.3M | ~$2.3M | ~$5.8M |
-| Severely adverse | ~$104.1M | ~$85.1M | ~$5.4M | ~$13.6M |
+| Baseline | ~$27.8M | ~$26.0M | ~$0.5M | ~$1.3M |
+| Adverse | ~$51.0M | ~$43.5M | ~$2.1M | ~$5.4M |
+| Severely adverse | ~$96.8M | ~$78.3M | ~$5.3M | ~$13.2M |
 
 **What drives ECL most:** unemployment has the largest standardized effect on monthly hazard,
 narrowly ahead of HPI decline; both dominate the static risk factors (FICO, LTV) at the

@@ -5,16 +5,14 @@
   They are used side by side to demonstrate complementary techniques — application
   scorecarding vs. portfolio lifecycle/vintage analytics — never combined into one book.
   See `docs/01-data-sources.md`.
-- **Home Credit is now real data** (downloaded from Kaggle, 307,511 applications, verified
-  against the known ~8.07% base default rate); **Fannie Mae and FRED remain synthetic
-  stand-ins** — disclosed explicitly, not hidden — because real Fannie Mae data requires
-  manual portal registration and FRED's swap-in reader (`ingest/fred_ingest.py`) just hasn't
-  been run yet. Every generator produces the exact real-world schema, and every
-  corresponding real-data reader (`ingest/kaggle_download.py`, `ingest/fannie_mae_ingest.py`,
-  `ingest/fred_ingest.py`) is written — swapping the remaining two in means running those and
-  rebuilding the warehouse, with nothing downstream changing. The Fannie Mae generator
-  (`ingest/synthetic_fannie_mae.py`) is a macro-modulated Markov delinquency model tuned to be
-  directionally realistic (crisis vintages default more than benign vintages).
+- **Home Credit and FRED are now real data** (Home Credit: downloaded from Kaggle, 307,511
+  applications, verified against the known ~8.07% base default rate; FRED: 478 months,
+  1987-2026, pulled via `fredapi`). **Fannie Mae remains a synthetic stand-in** — disclosed
+  explicitly, not hidden — because real extracts require manual portal registration with no
+  scriptable path. `ingest/fannie_mae_ingest.py` is written and ready for when that changes.
+  The Fannie Mae generator (`ingest/synthetic_fannie_mae.py`) is a macro-modulated Markov
+  delinquency model tuned to be directionally realistic (crisis vintages default more than
+  benign vintages), now driven by real macro data rather than a synthetic macro panel.
 - **The Home Credit reject pool is still synthetic** even though the accepted population is
   now real — see `docs/01-data-sources.md` and `docs/03-reject-inference.md`. This isn't a
   regression from using real data; no version of this dataset (real or synthetic) includes a
