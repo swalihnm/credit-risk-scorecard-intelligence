@@ -1,0 +1,30 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# raw and intermediate data - never commit (all regenerable via ingest/*.py)
+sources/home_credit/*.csv
+sources/home_credit/*.zip
+sources/fannie_mae/*.csv
+sources/fannie_mae/*.zip
+sources/fannie_mae/*.parquet
+sources/fred/*.parquet
+warehouse/*.duckdb
+marts/*.parquet
+
+# model artifacts - regenerable by running the pipeline, and scorecard/artifacts alone
+# (mostly optbinning binning objects + sklearn models) runs to ~10MB+ of binary pickles
+scorecard/artifacts/
+portfolio/artifacts/
+challenger/artifacts/
+
+# credentials
+.env
+kaggle.json
+*.pgpass
+
+# Power BI local cache
+powerbi/*.pbix.bak
+
+.DS_Store

@@ -1,0 +1,18 @@
+Display folder: Time Intelligence
+
+Default Rate PY =
+CALCULATE ( [Default Rate], SAMEPERIODLASTYEAR ( dim_date[date] ) )
+
+Default Rate YoY =
+[Default Rate] - [Default Rate PY]
+
+Exposure Rolling 12M =
+CALCULATE (
+    [Total Exposure],
+    DATESINPERIOD ( dim_date[date], MAX ( dim_date[date] ), -12, MONTH )
+)
+
+-- All three require dim_date marked as the model's official Date Table (Table tools > Mark
+-- as date table), and rely on the ACTIVE relationship from mart_loan_performance[reporting_date]
+-- to dim_date[date] -- not the inactive origination_date relationship used by
+-- "Originations by Vintage" in vintage.txt.

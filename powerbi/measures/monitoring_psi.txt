@@ -1,0 +1,48 @@
+Display folder: Model Monitoring
+
+PSI =
+SUMX (
+    VALUES ( dim_score_band[band] ),
+    VAR ActualPct =
+        DIVIDE (
+            CALCULATE ( COUNTROWS ( mart_application ) ),
+            CALCULATE ( COUNTROWS ( mart_application ), REMOVEFILTERS ( dim_score_band ) )
+        )
+    VAR ExpectedPct =
+        CALCULATE (
+            MAX ( mart_psi_reference[expected_pct] ),
+            mart_psi_reference[characteristic] = "score"
+        ) / 100
+    RETURN
+        IF (
+            ActualPct > 0 && ExpectedPct > 0,
+            ( ActualPct - ExpectedPct ) * LN ( DIVIDE ( ActualPct, ExpectedPct ) ),
+            0
+        )
+)
+
+-- NOTE on the zero-applications edge case (an interview question named in the project's own
+-- interview-prep list: "how does your PSI measure handle a score band with zero
+-- applications?"): if ActualPct is 0 for a band mart_psi_reference still has an expected_pct
+-- for, the IF above returns 0 for that band's contribution rather than blowing up on
+-- LN(0/x) = -infinity. That understates PSI for a band that used to have volume and now has
+-- none -- a real gap (a band disappearing entirely IS a distribution shift), which is exactly
+-- why the reliability table / score distribution chart on the same report page has to be
+-- read alongside PSI, not as a replacement for it.
+
+PSI Status =
+SWITCH (
+    TRUE (),
+    [PSI] < 0.10, "Stable",
+    [PSI] < 0.25, "Investigate",
+    "Rebuild"
+)
+
+Model Gini =
+AVERAGE ( mart_model_performance[gini] )
+
+Model KS =
+AVERAGE ( mart_model_performance[ks] )
+
+Model Brier =
+AVERAGE ( mart_model_performance[brier] )

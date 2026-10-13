@@ -1,0 +1,53 @@
+Display folder: Credit Policy
+
+-- Setup: Modeling > New Parameter > Numeric range, name "Cutoff", 400 to 800, increment 5,
+-- default 560 (the constrained optimum from policy/cutoff_optimizer.py). This creates a
+-- disconnected 'Cutoff' table with a 'Cutoff'[Cutoff] column.
+
+Selected Cutoff =
+SELECTEDVALUE ( 'Cutoff'[Cutoff], 560 )
+
+Approval Rate at Cutoff =
+DIVIDE (
+    CALCULATE (
+        COUNTROWS ( mart_application ),
+        mart_application[score] >= [Selected Cutoff]
+    ),
+    CALCULATE ( COUNTROWS ( mart_application ), REMOVEFILTERS ( mart_application ) )
+)
+
+Expected Loss at Cutoff =
+CALCULATE (
+    SUMX (
+        mart_application,
+        mart_application[pd] * mart_application[lgd] * mart_application[ead]
+    ),
+    mart_application[score] >= [Selected Cutoff]
+)
+
+Revenue at Cutoff =
+CALCULATE (
+    SUMX ( mart_application, mart_application[expected_revenue] ),
+    mart_application[score] >= [Selected Cutoff]
+)
+
+Capital at Cutoff =
+CALCULATE (
+    SUMX ( mart_application, mart_application[capital_required] ),
+    mart_application[score] >= [Selected Cutoff]
+)
+
+Risk Adjusted Return at Cutoff =
+DIVIDE (
+    [Revenue at Cutoff] - [Expected Loss at Cutoff],
+    [Capital at Cutoff]
+)
+
+-- Frontier chart (Credit Policy page): build a line/scatter chart from mart_cutoff_frontier
+-- directly (cutoff on the X axis, risk_adj_return or approval_rate on Y, sliced by
+-- dim_scenario), NOT from these what-if measures -- mart_cutoff_frontier already has the
+-- full swept grid from policy/cutoff_optimizer.py. Use the what-if measures above only to
+-- mark/annotate the CURRENTLY SELECTED point on that chart via the Cutoff parameter, per the
+-- project's own architecture note: the optimizer needs a solver (Python's job), the
+-- exploration needs to be interactive (Power BI's job) -- these measures are the
+-- "interactive" half, mart_cutoff_frontier is the "solver" half.

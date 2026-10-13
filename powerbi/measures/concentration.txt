@@ -1,0 +1,16 @@
+Display folder: Concentration
+
+Concentration HHI =
+SUMX (
+    VALUES ( dim_geography[state] ),
+    VAR Share =
+        DIVIDE (
+            CALCULATE ( [Total Exposure] ),
+            CALCULATE ( [Total Exposure], REMOVEFILTERS ( dim_geography ) )
+        )
+    RETURN Share * Share
+)
+
+-- Requires: dim_geography[state] joined (single-direction) to mart_loan_performance[state].
+-- HHI is on a 0-1 scale here (shares are fractions, not percentages); Power BI's format
+-- string should show it to 3-4 decimal places rather than as a percentage.

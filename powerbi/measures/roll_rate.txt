@@ -1,0 +1,19 @@
+Display folder: Roll Rates
+
+Roll Rate =
+DIVIDE (
+    COUNTROWS ( mart_loan_performance ),
+    CALCULATE (
+        COUNTROWS ( mart_loan_performance ),
+        REMOVEFILTERS ( dim_bucket_to )
+    )
+)
+
+-- Requires: dim_bucket_from joined to mart_loan_performance[bucket_prev], dim_bucket_to
+-- joined to mart_loan_performance[bucket_curr]. Put dim_bucket_from[bucket_from] on matrix
+-- rows and dim_bucket_to[bucket_to] on matrix columns -- bucket_prev/bucket_curr are already
+-- landed as columns on the fact table (see sql/analytics/roll_rate_matrix.sql), so this is a
+-- plain count, no window-function gymnastics needed in DAX.
+
+Roll Rate Count =
+COUNTROWS ( mart_loan_performance )

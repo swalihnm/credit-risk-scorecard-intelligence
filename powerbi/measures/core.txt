@@ -1,0 +1,34 @@
+Display folder: Core
+
+Total Loans =
+DISTINCTCOUNT ( mart_loan_performance[loan_id] )
+
+Total Exposure =
+SUM ( mart_loan_performance[upb] )
+
+Defaulted Loans =
+CALCULATE (
+    DISTINCTCOUNT ( mart_loan_performance[loan_id] ),
+    mart_loan_performance[is_default] = 1
+)
+
+Default Rate =
+DIVIDE ( [Defaulted Loans], [Total Loans] )
+
+Total Applications =
+COUNTROWS ( mart_application )
+
+Approval Rate =
+DIVIDE (
+    CALCULATE ( COUNTROWS ( mart_application ), mart_application[decision] = "Approved" ),
+    COUNTROWS ( mart_application )
+)
+
+Stage 1 Loans =
+CALCULATE ( DISTINCTCOUNT ( mart_ecl[loan_id] ), mart_ecl[stage] = 1 )
+
+Stage 2 Loans =
+CALCULATE ( DISTINCTCOUNT ( mart_ecl[loan_id] ), mart_ecl[stage] = 2 )
+
+Stage 3 Loans =
+CALCULATE ( DISTINCTCOUNT ( mart_ecl[loan_id] ), mart_ecl[stage] = 3 )

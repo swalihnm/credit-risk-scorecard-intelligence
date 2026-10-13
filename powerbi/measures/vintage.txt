@@ -1,0 +1,37 @@
+Display folder: Vintage
+
+Cumulative Default Rate =
+VAR CurrentMOB = MAX ( mart_loan_performance[months_on_book] )
+VAR CohortSize =
+    CALCULATE (
+        DISTINCTCOUNT ( mart_loan_performance[loan_id] ),
+        REMOVEFILTERS ( mart_loan_performance[months_on_book] )
+    )
+VAR DefaultsToDate =
+    CALCULATE (
+        DISTINCTCOUNT ( mart_loan_performance[loan_id] ),
+        mart_loan_performance[is_default] = 1,
+        mart_loan_performance[months_on_book] <= CurrentMOB,
+        REMOVEFILTERS ( mart_loan_performance[months_on_book] )
+    )
+RETURN
+    DIVIDE ( DefaultsToDate, CohortSize )
+
+-- NOTE: this measure reproduces sql/analytics/vintage_curves.sql's logic inside DAX filter
+-- context, for use directly on the mart_loan_performance fact table in a matrix visual
+-- (origination cohort on rows, months-on-book on columns). The SQL file computes the SAME
+-- number a different way (via a month-offset join against fm_defaults, not through this
+-- fact table's own months_on_book column) specifically because a charged-off loan's fm_
+-- performance rows stop at its default month -- see that file's own header comment for the
+-- undercounting bug that caused when the two were first (incorrectly) computed differently.
+-- Cross-check the two if this measure is ever extended.
+
+Originations by Vintage =
+CALCULATE (
+    COUNTROWS ( mart_loan_performance ),
+    USERELATIONSHIP ( mart_loan_performance[origination_date], dim_date[date] )
+)
+
+-- Requires: an INACTIVE relationship from mart_loan_performance[origination_date] to
+-- dim_date[date] (the ACTIVE relationship stays on reporting_date -> dim_date[date], since
+-- that's what every other time-based measure on this fact table should filter by).

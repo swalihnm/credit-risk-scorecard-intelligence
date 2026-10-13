@@ -1,0 +1,33 @@
+Display folder: ECL & Stress Testing
+
+ECL =
+SUM ( mart_ecl[ecl] )
+
+-- mart_ecl[ecl] is already PD x LGD x EAD x discount_factor, computed upstream in
+-- portfolio/ecl_engine.py (per the project's own principle: heavy lifting upstream, DAX for
+-- aggregation only). Recomputing it via SUMX(mart_ecl, pd_used*lgd*ead*discount_factor) would
+-- give the identical number -- SUM() is preferred here specifically because the components
+-- are already multiplied through in the mart.
+
+ECL Stage 1 =
+CALCULATE ( [ECL], mart_ecl[stage] = 1 )
+
+ECL Stage 2 =
+CALCULATE ( [ECL], mart_ecl[stage] = 2 )
+
+ECL Stage 3 =
+CALCULATE ( [ECL], mart_ecl[stage] = 3 )
+
+ECL vs Baseline =
+VAR Baseline = CALCULATE ( [ECL], dim_scenario[scenario] = "baseline" )
+RETURN DIVIDE ( [ECL] - Baseline, Baseline )
+
+-- Requires: dim_scenario[scenario] joined to mart_ecl[scenario] (text key -- see
+-- docs/05-powerbi-data-model.md for why this uses a text join rather than an integer
+-- surrogate key in this build, and what a production model should do instead).
+
+Average PD (12m) =
+AVERAGE ( mart_ecl[pd_12m] )
+
+Average PD (Lifetime) =
+AVERAGE ( mart_ecl[pd_lifetime] )
